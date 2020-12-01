@@ -29,6 +29,7 @@ require('./CCTiledMapAsset');
 require('./CCTiledLayer');
 require('./CCTiledTile');
 require('./CCTiledObjectGroup');
+require('../core/assets/CCSpriteFrame');
 
 /**
  * !#en The orientation of tiled map.
@@ -267,7 +268,7 @@ let TMXObjectType = cc.Enum({
      * @static
      */
     POLYLINE : 3,
-    
+
     /**
      * @property IMAGE
      * @type {Number}
@@ -315,6 +316,10 @@ let TiledMap = cc.Class({
 
         this._mapSize = cc.size(0, 0);
         this._tileSize = cc.size(0, 0);
+
+        this._hasAtlases = false;
+
+        this._preloaded = false;
     },
 
     statics: {
@@ -345,11 +350,57 @@ let TiledMap = cc.Class({
             set (value, force) {
                 if (this._tmxFile !== value || (CC_EDITOR && force)) {
                     this._tmxFile = value;
-                    this._applyFile();
+                    if (this._preloaded || CC_EDITOR){
+                        if (this._tileAtlases && this._tileAtlases.length > 0) {
+                            this._applyFile(false);
+                        } else {
+                            this._applyFile(true);
+                        }
+                    }
                 }
             },
             type: cc.TiledMapAsset
-        }
+        },
+
+        _tileAtlases: {
+            default: [],
+            type: cc.SpriteAtlas
+        },
+        tileAtlases: {
+            get () {
+                return this._tileAtlases;
+            },
+            set (value) {
+                this._tileAtlases = value;
+                (this._preloaded || CC_EDITOR) && _applyFile(false);
+            },
+            type: [cc.SpriteAtlas]
+        },
+
+        /**
+         * !#en
+         * Whether or not enabled tiled map auto culling. If you set the TiledMap skew or rotation, then need to manually disable this, otherwise, the rendering will be wrong.
+         * !#zh
+         * 是否开启瓦片地图的自动裁减功能。瓦片地图如果设置了 skew, rotation 或者采用了摄像机的话，需要手动关闭，否则渲染会出错。
+         */
+        _enableCulling: {
+            default: true
+        },
+        enableCulling: {
+            get () {
+                return this._enableCulling;
+            },
+            set (value) {
+                this._enableCulling = value;
+                let layers = this._layers;
+                for (let i = 0; i < layers.length; ++i) {
+                    layers[i].enableCulling(value);
+                }
+            },
+            type: cc.Boolean
+        },
+
+        cleanupImageCache : true
     },
 
     /**
@@ -426,19 +477,6 @@ let TiledMap = cc.Class({
         }
 
         return null;
-    },
-
-    /**
-     * !#en enable or disable culling
-     * !#zh 开启或关闭裁剪。
-     * @method enableCulling
-     * @param value
-     */
-    enableCulling (value) {
-        let layers = this._layers;
-        for (let i = 0; i < layers.length; ++i) {
-            layers[i].enableCulling(value);
-        }
     },
 
     /**
@@ -532,9 +570,16 @@ let TiledMap = cc.Class({
     },
 
     __preload () {
-        if (this._tmxFile) {
-            // refresh layer entities
-            this._applyFile();
+        this._preloaded = true;
+
+        if (!this._tmxFile) {
+            return;
+        }
+
+        if (this._tileAtlases.length > 0) {
+            this._applyFile(false);
+        } else {
+            this._applyFile(true);
         }
     },
 
@@ -546,22 +591,58 @@ let TiledMap = cc.Class({
         this.node.off(cc.Node.EventType.ANCHOR_CHANGED, this._syncAnchorPoint, this);
     },
 
-    _applyFile () {
+    _applyFile (fromFile) {
+
+        this._spriteFrames = [];
+        this.spriteFramesCache = {};
+        this.nameToGID = {};
+
         let file = this._tmxFile;
+        this._hasAtlases = this._tileAtlases.length > 0;
+
         if (file) {
-            let texValues = file.textures;
+            // let texValues = file.textures;
             let texKeys = file.textureNames;
             let texSizes = file.textureSizes;
+            let spfValues = file.spriteFrames;
             let textures = {};
             let textureSizes = {};
-            for (let i = 0; i < texValues.length; ++i) {
-                let texName = texKeys[i];
-                textures[texName] = texValues[i];
-                textureSizes[texName] = texSizes[i];
+
+            if (fromFile) {
+                for (let i = 0; i < texKeys.length; ++i) {
+                    let texName = texKeys[i];
+                    // textures[texName] = texValues[i];
+                    textureSizes[texName] = texSizes[i];
+                    this._spriteFrames[i] = spfValues[i];
+                    let frame = this._spriteFrames[i];
+                    if (frame) {
+                        this.spriteFramesCache[frame.name] = frame;
+                        textures[texName] = frame.getTexture();
+                    }
+                }
+            } else {
+                let allSpriteFrames = this.spriteFramesCache;
+
+                this._tileAtlases.forEach(function(atlas) {
+                    let sfs = atlas.getSpriteFrames();
+                    sfs.forEach(function(sf) {
+                        allSpriteFrames[sf.name] = sf;
+                    });
+                });
+
+                for (let i = 0; i < texKeys.length; ++i) {
+                    let frameName = cc.TiledMap.getShortName(texKeys[i]);
+                    textureSizes[frameName] = texSizes[i];
+                    let frame = allSpriteFrames[frameName] || spfValues[i];
+                    if (frame) {
+                        this._spriteFrames[i] = frame;
+                        textures[frameName] = frame.getTexture();
+                    }
+                }
             }
 
             let imageLayerTextures = {};
-            texValues = file.imageLayerTextures;
+            let texValues = file.imageLayerTextures;
             texKeys = file.imageLayerTextureNames;
             for (let i = 0; i < texValues.length; ++i) {
                 imageLayerTextures[texKeys[i]] = texValues[i];
@@ -576,12 +657,18 @@ let TiledMap = cc.Class({
                 }
             }
 
-            let mapInfo = new cc.TMXMapInfo(file.tmxXmlStr, tsxMap, textures, textureSizes, imageLayerTextures);
+            let mapInfo = new cc.TMXMapInfo(file.tmxXmlStr, tsxMap, textures, textureSizes, imageLayerTextures, this._hasAtlases);
             let tilesets = mapInfo.getTilesets();
-            if(!tilesets || tilesets.length === 0)
+            if(!tilesets || tilesets.length === 0) {
                 cc.logID(7241);
+            }
 
             this._buildWithMapInfo(mapInfo);
+
+            if (!CC_EDITOR) {
+                cc.assetManager.releaseAsset(this._tmxFile);
+                this._tmxFile = null;
+            }
         }
         else {
             this._releaseMapInfo();
@@ -662,10 +749,22 @@ let TiledMap = cc.Class({
         let texGrids = this._texGrids;
         let animations = this._animations;
         texGrids.length = 0;
+
+        let texIdCache = {};
         for (let i = 0, l = tilesets.length; i < l; ++i) {
             let tilesetInfo = tilesets[i];
             if (!tilesetInfo) continue;
-            cc.TiledMap.fillTextureGrids(tilesetInfo, texGrids, i);
+            let sf = this._spriteFrames[i];
+            if (!sf) {
+                console.warn("Can't find the spriteFrame of tilesets " + i);
+                continue;
+            }
+            let tex = sf.getTexture();
+            let idx = texIdCache[tex._id];
+            if (idx === undefined) {
+                texIdCache[tex._id] = idx = i;
+            }
+            cc.TiledMap.fillTextureGrids(tilesetInfo, texGrids, idx, this._spriteFrames[i], this.nameToGID);
         }
         this._fillAniGrids(texGrids, animations);
 
@@ -694,6 +793,8 @@ let TiledMap = cc.Class({
         let maxWidth = 0;
         let maxHeight = 0;
 
+        mapInfo.cullingInfo = {}
+
         if (layerInfos && layerInfos.length > 0) {
             for (let i = 0, len = layerInfos.length; i < len; i++) {
                 let layerInfo = layerInfos[i];
@@ -716,8 +817,12 @@ let TiledMap = cc.Class({
                     if (!layer) {
                         layer = child.addComponent(cc.TiledLayer);
                     }
-                    
+
+                    layer.index = i;
+
                     layer._init(layerInfo, mapInfo, tilesets, textures, texGrids);
+
+                    layer.enableCulling(this._enableCulling);
 
                     // tell the layerinfo to release the ownership of the tiles map.
                     layerInfo.ownTiles = false;
@@ -741,7 +846,7 @@ let TiledMap = cc.Class({
                     if (!image) {
                         image = child.addComponent(cc.Sprite);
                     }
-                    
+
                     let spf = image.spriteFrame || new cc.SpriteFrame();
                     spf.setTexture(texture);
                     image.spriteFrame = spf;
@@ -797,9 +902,31 @@ let TiledMap = cc.Class({
             totalTextures.push(imageLayer.sourceImage);
         }
 
-        cc.TiledMap.loadAllTextures (totalTextures, function () {
+        cc.TiledMap.loadAllTextures(totalTextures, function () {
             this._buildLayerAndGroup();
+
+            if (this.cleanupImageCache) {
+                let tiledMap = this;
+                this._textures.forEach(function(tex){
+                    tiledMap.doCleanupImageCache(tex)
+                });
+            }
+
         }.bind(this));
+    },
+
+    doCleanupImageCache(texture) {
+        if (texture._image instanceof HTMLImageElement) {
+            texture._image.src = '';
+        }
+        else if (cc.sys.capabilities.imageBitmap && texture._image instanceof ImageBitmap) {
+            texture._image.close && texture._image.close();
+        }
+        texture._image = null;
+    },
+
+    getGIDByName (name) {
+        return this.nameToGID[name];
     },
 
     update (dt) {
@@ -852,34 +979,48 @@ cc.TiledMap.loadAllTextures = function (textures, loadedCallback) {
     }
 };
 
-cc.TiledMap.fillTextureGrids = function (tileset, texGrids, texId) {
-    let tex = tileset.sourceImage;
+cc.TiledMap.getShortName = function (name) {
+    name = name.replace(/\\/g, '\/');
+    let splashIndex = name.lastIndexOf("/") + 1;
+    let dotIndex = name.lastIndexOf(".");
+    dotIndex = dotIndex < 0 ? name.length : dotIndex;
+    return name.substring(splashIndex, dotIndex);
+};
+
+cc.TiledMap.fillTextureGrids = function (tileset, texGrids, texId, spFrame, nameToGID) {
+
+    let tex = spFrame ? spFrame.getTexture() : tileset.sourceImage;
+
+    let collection = tileset.collection;
 
     if (!tileset.imageSize.width || !tileset.imageSize.height) {
-        tileset.imageSize.width = tex.width;
-        tileset.imageSize.height = tex.height;
+        let sourceImage = tileset.sourceImage;
+        tileset.imageSize.width = sourceImage.width;
+        tileset.imageSize.height = sourceImage.height;
     }
+
+    let imageWidth = tileset.imageSize.width;
+    let imageHeight = tileset.imageSize.height;
 
     let tw = tileset._tileSize.width,
-        th = tileset._tileSize.height,
-        imageW = tex.width,
-        imageH = tex.height,
-        spacing = tileset.spacing,
-        margin = tileset.margin,
+        th = tileset._tileSize.height;
+    let texWidth = tex.width,
+        texHeight = tex.height;
+    let spacing = tileset.spacing,
+        margin = tileset.margin;
 
-        cols = Math.floor((imageW - margin*2 + spacing) / (tw + spacing)),
-        rows = Math.floor((imageH - margin*2 + spacing) / (th + spacing)),
-        count = rows * cols,
+    let count = 1;
+    if (!collection){
+        let cols = Math.floor((imageWidth - margin * 2 + spacing) / (tw + spacing));
+        let rows = Math.floor((imageHeight - margin * 2 + spacing) / (th + spacing));
+        count = Math.max(1, rows * cols);
+    }
 
-        gid = tileset.firstGid,
-        grid = null,
-        override = texGrids[gid] ? true : false,
-        texelCorrect = cc.macro.FIX_ARTIFACTS_BY_STRECHING_TEXEL_TMX ? 0.5 : 0;
+    let gid = tileset.firstGid;
+    let grid = null;
+    let override = texGrids[gid] ? true : false;
 
     // Tiledmap may not be partitioned into blocks, resulting in a count value of 0
-    if (count <= 0) {
-        count = 1;
-    }
 
     let maxGid = tileset.firstGid + count;
     for (; gid < maxGid; ++gid) {
@@ -891,24 +1032,58 @@ cc.TiledMap.fillTextureGrids = function (tileset, texGrids, texId) {
             break;
         }
 
+        if (spFrame && nameToGID) {
+            nameToGID[spFrame.name] = gid;
+        }
+
         grid = {
             // record texture id
-            texId: texId, 
+            texId: texId,
             // record belong to which tileset
             tileset: tileset,
             x: 0, y: 0, width: tw, height: th,
             t: 0, l: 0, r: 0, b: 0,
+            cx: 0, cy: 0,
+            offsetX: 0,
+            offsetY: 0,
+            rotated: false,
             gid: gid,
+            _texture: tex
         };
+
         tileset.rectForGID(gid, grid);
-        grid.x += texelCorrect;
-        grid.y += texelCorrect;
-        grid.width -= texelCorrect*2;
-        grid.height -= texelCorrect*2;
-        grid.t = (grid.y) / imageH;
-        grid.l = (grid.x) / imageW;
-        grid.r = (grid.x + grid.width) / imageW;
-        grid.b = (grid.y + grid.height) / imageH;
+
+        // TODO: Shall we check `count` or `collection` ???
+        //  a)  if (spFrame) ...
+        //  b)  if (spFrame && count <=1 ) ...
+        //  c)  if (spFrame && collection) ...
+        if (spFrame && collection) {
+            // grid._spriteFrame = spFrame;
+            grid._name = spFrame.name;
+            grid._rotated = spFrame._rotated;
+            grid._rect = spFrame.getRect();
+            if (grid._rotated) {
+                grid.l = spFrame.uv[0];
+                grid.t = spFrame.uv[1];
+                grid.r = spFrame.uv[4];
+                grid.b = spFrame.uv[3];
+            } else {
+                grid.l = spFrame.uv[0];
+                grid.t = spFrame.uv[5];
+                grid.r = spFrame.uv[2];
+                grid.b = spFrame.uv[1];
+            }
+        } else {
+            grid.l = grid.x / texWidth;
+            grid.t = grid.y / texHeight;
+            grid.r = (grid.x + grid.width) / texWidth;
+            grid.b = (grid.y + grid.height) / texHeight;
+            grid._rect = cc.rect(grid);
+        }
+
+        grid.cx = (grid.l + grid.r) / 2;
+        grid.cy = (grid.t + grid.b) / 2;
+
         texGrids[gid] = grid;
     }
 };

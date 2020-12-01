@@ -36,6 +36,21 @@ let TiledObjectGroup = cc.Class({
     // because TiledLayer not create or maintains the sgNode by itself.
     extends: cc.Component,
 
+    properties: {
+        _premultiplyAlpha: {
+            default: false
+        },
+        premultiplyAlpha : {
+            get () {
+                return this._premultiplyAlpha;
+            },
+            set (value) {
+                this._premultiplyAlpha = value;
+            },
+            type: cc.Boolean
+        }
+    },
+
     /**
      * !#en Offset position of child objects.
      * !#zh 获取子对象的偏移位置。
@@ -132,9 +147,22 @@ let TiledObjectGroup = cc.Class({
         this._offset = cc.v2(groupInfo.offset.x, -groupInfo.offset.y);
         this._opacity = groupInfo._opacity;
 
+        if (groupInfo.tintColor) {
+            this._tintColor = cc.color(groupInfo.tintColor);
+        }
+
+        this._texGrids = texGrids;
+        this._animations = mapInfo.getTileAnimations();
+        this.aniObjects = [];
+        this._hasAniObj = false;
+
         let mapSize = mapInfo._mapSize;
         let tileSize = mapInfo._tileSize;
-        let width = 0, height = 0;
+        let width = 0,
+            height = 0;
+
+        const iso = Orientation.ISO === mapInfo.orientation;
+
         if (mapInfo.orientation === Orientation.HEX) {
             if (mapInfo.getStaggerAxis() === StaggerAxis.STAGGERAXIS_X) {
                 height = tileSize.height * (mapSize.height + 0.5);
@@ -143,12 +171,12 @@ let TiledObjectGroup = cc.Class({
                 width = tileSize.width * (mapSize.width + 0.5);
                 height = (tileSize.height + mapInfo.getHexSideLength()) * Math.floor(mapSize.height / 2) + tileSize.height * (mapSize.height % 2);
             }
-        } else if (mapInfo.orientation === Orientation.ISO) {
+        } else if (iso) {
             let wh = mapSize.width + mapSize.height;
             width = tileSize.width * 0.5 * wh;
             height = tileSize.height * 0.5 * wh;
         } else {
-            width = mapSize.width * tileSize.width; 
+            width = mapSize.width * tileSize.width;
             height = mapSize.height * tileSize.height;
         }
         this.node.setContentSize(width, height);
@@ -162,21 +190,21 @@ let TiledObjectGroup = cc.Class({
             let object = objects[i];
             let objType = object.type;
             object.offset = cc.v2(object.x, object.y);
-            
+
             let points = object.points || object.polylinePoints;
             if (points) {
                 for (let pi = 0; pi < points.length; pi++) {
                     points[pi].y *= -1;
                 }
-            }         
+            }
 
-            if (Orientation.ISO !== mapInfo.orientation) {
-                object.y = height - object.y;
-            } else {
+            if (iso) {
                 let posIdxX = object.x / tileSize.height;
                 let posIdxY = object.y / tileSize.height;
                 object.x = tileSize.width * 0.5 * (mapSize.height + posIdxX - posIdxY);
                 object.y = tileSize.height * 0.5 * (mapSize.width + mapSize.height - posIdxX - posIdxY);
+            } else {
+                object.y = height - object.y;
             }
 
             if (objType === TMXObjectType.TEXT) {
@@ -200,11 +228,15 @@ let TiledObjectGroup = cc.Class({
                 textNode.opacity = this._opacity;
                 textNode.setSiblingIndex(i);
 
+                if (this._tintColor) {
+                    textNode.color = this._tintColor;
+                }
+
                 let label = textNode.getComponent(cc.Label);
                 if (!label) {
                     label = textNode.addComponent(cc.Label);
                 }
-                
+
                 label.overflow = cc.Label.Overflow.SHRINK;
                 label.lineHeight = object.height;
                 label.string = object.text;
@@ -214,20 +246,17 @@ let TiledObjectGroup = cc.Class({
 
                 textNode.width = object.width;
                 textNode.height = object.height;
-            }
-
-            if (objType === TMXObjectType.IMAGE) {
+            } else if (objType === TMXObjectType.IMAGE) {
                 let gid = object.gid;
-                let grid = texGrids[(gid & FLIPPED_MASK) >>> 0];
+                let gridGID = ((gid & FLIPPED_MASK) >>> 0);
+                let grid = texGrids[gridGID];
                 if (!grid) continue;
                 let tileset = grid.tileset;
                 let imgName = "img" + object.id;
                 aliveNodes[imgName] = true;
                 let imgNode = this.node.getChildByName(imgName);
-                let imgWidth = object.width || grid.width;
-                let imgHeight = object.height || grid.height;
-                let tileOffsetX = tileset.tileOffset.x;
-                let tileOffsetY = tileset.tileOffset.y;
+                object.width = object.width || grid.width;
+                object.height = object.height || grid.height;
 
                 // Delete image nodes implemented as private nodes
                 // Use cc.Node to implement node-level requirements
@@ -241,13 +270,29 @@ let TiledObjectGroup = cc.Class({
                     imgNode = new cc.Node();
                 }
 
-                if (Orientation.ISO == mapInfo.orientation) {
-                    imgNode.anchorX = 0.5 + tileOffsetX / imgWidth;
-                    imgNode.anchorY = tileOffsetY / imgHeight;
-                } else {
-                    imgNode.anchorX = tileOffsetX / imgWidth;
-                    imgNode.anchorY = tileOffsetY / imgHeight;
+                if (this._tintColor) {
+                    imgNode.color = this._tintColor;
                 }
+
+                if (this._animations[gridGID]) {
+                    this.aniObjects.push({
+                        object: object,
+                        imgNode: imgNode,
+                        gridGID: gridGID,
+                    })
+                    this._hasAniObj = true;
+                }
+
+                let tileOffsetX = tileset.tileOffset.x;
+                let tileOffsetY = tileset.tileOffset.y;
+                if (iso) {
+                    imgNode.anchorX = 0.5 + tileOffsetX / object.width;
+                    imgNode.anchorY = tileOffsetY / object.height;
+                } else {
+                    imgNode.anchorX = tileOffsetX / object.width;
+                    imgNode.anchorY = tileOffsetY / object.height;
+                }
+
                 imgNode.active = object.visible;
                 imgNode.angle = -object.rotation;
                 imgNode.x = object.x - leftTopX;
@@ -257,11 +302,17 @@ let TiledObjectGroup = cc.Class({
                 imgNode.opacity = this._opacity;
                 imgNode.setSiblingIndex(i);
 
-                let sp = imgNode.getComponent(cc.Sprite);
-                if (!sp) {
-                    sp = imgNode.addComponent(cc.Sprite);
+                let sprite = imgNode.getComponent(cc.Sprite);
+                if (!sprite) {
+                    sprite = imgNode.addComponent(cc.Sprite);
                 }
-                let spf = sp.spriteFrame;
+                sprite.sizeMode = cc.Sprite.SizeMode.CUSTOM;
+
+                sprite._srcBlendFactor = this._premultiplyAlpha ? cc.gfx.BLEND_ONE : cc.gfx.BLEND_SRC_ALPHA;
+                sprite._dstBlendFactor = cc.gfx.BLEND_ONE_MINUS_SRC_ALPHA;
+                sprite._updateBlendFunc(true);
+
+                let spf = sprite.spriteFrame;
                 if (!spf) {
                     spf = new cc.SpriteFrame();
                 }
@@ -278,13 +329,15 @@ let TiledObjectGroup = cc.Class({
                     spf.setFlipY(false);
                 }
 
-                spf.setTexture(grid.tileset.sourceImage, cc.rect(grid));
-                sp.spriteFrame = spf;
-                sp.setVertsDirty();
+                spf._rotated = grid._rotated;
+                spf._rect = grid._rect;
+                spf._refreshTexture(grid._texture);
 
-                // object group may has no width or height info
-                imgNode.width = imgWidth;
-                imgNode.height = imgHeight;
+                sprite.spriteFrame = spf;
+
+                imgNode.setContentSize(object.width, object.height);
+
+                sprite.setVertsDirty();
             }
         }
         this._objects = objects;
@@ -298,7 +351,51 @@ let TiledObjectGroup = cc.Class({
             let isUseless = uselessExp.test(cName);
             if (isUseless && !aliveNodes[cName]) c.destroy();
         }
+    },
+
+    update(dt) {
+        if (!this._hasAniObj) {
+            return;
+        }
+
+        const aniObjects = this.aniObjects;
+        const _texGrids = this._texGrids;
+        const iso = cc.TiledMap.Orientation.ISO === this._mapInfo.orientation
+
+        for (let i = 0, len = aniObjects.length; i < len; i++) {
+            let aniObj = aniObjects[i];
+            let gridGID = aniObj.gridGID;
+            let grid = _texGrids[gridGID];
+            if (!grid) {
+                continue;
+            }
+
+            let tileset = grid.tileset;
+            let object = aniObj.object;
+            let imgNode = aniObj.imgNode;
+
+            let tileOffsetX = tileset.tileOffset.x;
+            let tileOffsetY = tileset.tileOffset.y;
+            if (iso) {
+                imgNode.anchorX = 0.5 + tileOffsetX / object.width;
+                imgNode.anchorY = tileOffsetY / object.height;
+            } else {
+                imgNode.anchorX = tileOffsetX / object.width;
+                imgNode.anchorY = tileOffsetY / object.height;
+            }
+
+            let sp = imgNode.getComponent(cc.Sprite);
+            let spf = sp.spriteFrame;
+
+            spf._rotated = grid._rotated;
+            spf._rect = grid._rect;
+            spf._refreshTexture(grid._texture);
+
+            sp.spriteFrame = spf;
+            sp.setVertsDirty();
+        }
     }
+
 });
 
 cc.TiledObjectGroup = module.exports = TiledObjectGroup;

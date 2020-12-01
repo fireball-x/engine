@@ -33,7 +33,10 @@ let _mat4_temp = cc.mat4();
 let _vec2_temp = cc.v2();
 let _vec2_temp2 = cc.v2();
 let _vec2_temp3 = cc.v2();
-let _tempRowCol = {row:0, col:0};
+let _tempRowCol = {
+    row: 0,
+    col: 0
+};
 
 let TiledUserNodeData = cc.Class({
     name: 'cc.TiledUserNodeData',
@@ -61,13 +64,13 @@ let TiledLayer = cc.Class({
     // because TiledLayer not create or maintains the sgNode by itself.
     extends: RenderComponent,
 
-    editor: {
-        inspector: 'packages://inspector/inspectors/comps/tiled-layer.js',
-    },
+    // editor: {
+    //     inspector: 'packages://inspector/inspectors/comps/tiled-layer.js',
+    // },
 
     ctor () {
-        this._userNodeGrid = {};// [row][col] = {count: 0, nodesList: []};
-        this._userNodeMap = {};// [id] = node;
+        this._userNodeGrid = {}; // [row][col] = {count: 0, nodesList: []};
+        this._userNodeMap = {}; // [id] = node;
         this._userNodeDirty = false;
 
         // store the layer tiles node, index is caculated by 'x + width * y', format likes '[0]=tileNode0,[1]=tileNode1, ...'
@@ -80,23 +83,39 @@ let TiledLayer = cc.Class({
         // texture id to material index
         this._texIdToMatIndex = {};
 
-        this._viewPort = {x:-1, y:-1, width:-1, height:-1};
+        this._viewPort = {
+            x: -1,
+            y: -1,
+            width: -1,
+            height: -1
+        };
         this._cullingRect = {
-            leftDown:{row:-1, col:-1},
-            rightTop:{row:-1, col:-1}
+            leftDown: {
+                row: -1,
+                col: -1
+            },
+            rightTop: {
+                row: -1,
+                col: -1
+            }
         };
         this._cullingDirty = true;
-        this._rightTop = {row:-1, col:-1};
+        this._rightTop = {
+            row: -1,
+            col: -1
+        };
 
         this._layerInfo = null;
         this._mapInfo = null;
 
-        // record max or min tile texture offset, 
+        // record max or min tile texture offset,
         // it will make culling rect more large, which insure culling rect correct.
         this._topOffset = 0;
         this._downOffset = 0;
         this._leftOffset = 0;
         this._rightOffset = 0;
+
+        this._diamondTile = false;
 
         // store the layer tiles, index is caculated by 'x + width * y', format likes '[0]=gid0,[1]=gid1, ...'
         this._tiles = [];
@@ -122,7 +141,77 @@ let TiledLayer = cc.Class({
         this._animations = null;
 
         // switch of culling
-        this._enableCulling = cc.macro.ENABLE_TILEDMAP_CULLING;
+        this._enableCulling = null;
+
+        this._tileChanged = false;
+
+        this.index = null;
+    },
+
+    properties: {
+        _premultiplyAlpha: {
+            default: false
+        },
+        premultiplyAlpha: {
+            get () {
+                return this._premultiplyAlpha;
+            },
+            set (value) {
+                if (this._premultiplyAlpha !== value) {
+                    this._premultiplyAlpha = value;
+                    this._activateMaterial();
+                }
+            },
+            type: cc.Boolean
+        },
+
+        _diamondTile: {
+            default: false
+        },
+        diamondTile: {
+            get () {
+                return this._diamondTile;
+            },
+            set (value) {
+                this._diamondTile = value;
+            },
+            type: cc.Boolean
+        },
+
+        _shareCulling: {
+            default: false
+        },
+        shareCulling: {
+            get () {
+                return this._shareCulling;
+            },
+            set (value) {
+                this._shareCulling = value;
+            },
+            type: cc.Boolean
+        },
+
+        _withColor: {
+            default: true
+        },
+        withColor: {
+            get () {
+                return this._withColor;
+            },
+            set (value) {
+                if (this._withColor !== value) {
+                    this._tileChanged = true;
+                    this._withColor = value;
+                    this._texIdToMatIndex = {};
+                    this._materials = [];
+                    if (this._renderDataList) {
+                        this._renderDataList = null;
+                    }
+                    this._activateMaterial();
+                }
+            },
+            type: cc.Boolean
+        }
     },
 
     _hasTiledNode () {
@@ -140,7 +229,7 @@ let TiledLayer = cc.Class({
      * @param value
      */
     enableCulling (value) {
-        if (this._enableCulling != value) {
+        if (this._enableCulling !== value) {
             this._enableCulling = value;
             this._cullingDirty = true;
         }
@@ -168,7 +257,7 @@ let TiledLayer = cc.Class({
         dataComp._row = -1;
         dataComp._col = -1;
         dataComp._tiledLayer = this;
-        
+
         this._nodeLocalPosToLayerPos(node, _vec2_temp);
         this._positionToRowCol(_vec2_temp.x, _vec2_temp.y, _tempRowCol);
         this._addUserNodeToGrid(dataComp, _tempRowCol);
@@ -286,8 +375,8 @@ let TiledLayer = cc.Class({
         let rowData = this._userNodeGrid[row];
         let colData = rowData && rowData[col];
         if (colData) {
-            rowData.count --;
-            colData.count --;
+            rowData.count--;
+            colData.count--;
             colData.list[index] = null;
             if (colData.count <= 0) {
                 colData.list.length = 0;
@@ -313,8 +402,13 @@ let TiledLayer = cc.Class({
     _addUserNodeToGrid (dataComp, tempRowCol) {
         let row = tempRowCol.row;
         let col = tempRowCol.col;
-        let rowData = this._userNodeGrid[row] = this._userNodeGrid[row] || {count : 0};
-        let colData = rowData[col] = rowData[col] || {count : 0, list: []};
+        let rowData = this._userNodeGrid[row] = this._userNodeGrid[row] || {
+            count: 0
+        };
+        let colData = rowData[col] = rowData[col] || {
+            count: 0,
+            list: []
+        };
         dataComp._row = row;
         dataComp._col = col;
         dataComp._index = colData.list.length;
@@ -416,12 +510,11 @@ let TiledLayer = cc.Class({
         if (y !== undefined) {
             x = Math.floor(pos);
             y = Math.floor(y);
-        }
-        else {
+        } else {
             x = Math.floor(pos.x);
             y = Math.floor(pos.y);
         }
-        
+
         let ret;
         switch (this._layerOrientation) {
             case cc.TiledMap.Orientation.ORTHO:
@@ -447,7 +540,8 @@ let TiledLayer = cc.Class({
     },
 
     _positionForIsoAt (x, y) {
-        let offsetX = 0, offsetY = 0;
+        let offsetX = 0,
+            offsetY = 0;
         let index = Math.floor(x) + Math.floor(y) * this._layerSize.width;
         let gidAndFlags = this._tiles[index];
         if (gidAndFlags) {
@@ -465,7 +559,8 @@ let TiledLayer = cc.Class({
     },
 
     _positionForOrthoAt (x, y) {
-        let offsetX = 0, offsetY = 0;
+        let offsetX = 0,
+            offsetY = 0;
         let index = Math.floor(x) + Math.floor(y) * this._layerSize.width;
         let gidAndFlags = this._tiles[index];
         if (gidAndFlags) {
@@ -497,7 +592,8 @@ let TiledLayer = cc.Class({
         }
 
         let odd_even = (this._staggerIndex === cc.TiledMap.StaggerIndex.STAGGERINDEX_ODD) ? 1 : -1;
-        let x = 0, y = 0;
+        let x = 0,
+            y = 0;
         let diffX = 0;
         let diffY = 0;
         switch (this._staggerAxis) {
@@ -540,7 +636,7 @@ let TiledLayer = cc.Class({
         if (beginCol < 0) beginCol = 0;
         let gidsIdx = 0;
         let endCol = beginCol + totalCols;
-        for (let row = beginRow; ; row++) {
+        for (let row = beginRow;; row++) {
             for (let col = beginCol; col < endCol; col++) {
                 if (gidsIdx >= gids.length) return;
                 this._updateTileForGID(gids[gidsIdx], col, row);
@@ -580,7 +676,7 @@ let TiledLayer = cc.Class({
             pos = posOrX;
             flags = flagsOrY;
         }
-        
+
         let ugid = gid & cc.TiledMap.TileFlag.FLIPPED_MASK;
 
         pos.x = Math.floor(pos.x);
@@ -588,7 +684,7 @@ let TiledLayer = cc.Class({
         if (this._isInvalidPosition(pos)) {
             throw new Error("cc.TiledLayer.setTileGIDAt(): invalid position");
         }
-        if (!this._tiles || !this._tilesets || this._tilesets.length == 0) {
+        if (!this._tiles || !this._tilesets || this._tilesets.length === 0) {
             cc.logID(7238);
             return;
         }
@@ -598,7 +694,7 @@ let TiledLayer = cc.Class({
         }
 
         flags = flags || 0;
-        this._updateTileForGID( (gid | flags) >>> 0, pos.x, pos.y);
+        this._updateTileForGID((gid | flags) >>> 0, pos.x, pos.y);
     },
 
     _updateTileForGID (gidAndFlags, x, y) {
@@ -611,7 +707,7 @@ let TiledLayer = cc.Class({
         let gid = ((gidAndFlags & cc.TiledMap.TileFlag.FLIPPED_MASK) >>> 0);
         let grid = this._texGrids[gid];
         let tilesetIdx = grid && grid.texId;
-        
+
         if (grid) {
             this._tiles[idx] = gidAndFlags;
             this._updateVertex(x, y);
@@ -619,21 +715,10 @@ let TiledLayer = cc.Class({
         } else {
             this._tiles[idx] = 0;
         }
-        this._cullingDirty = true;
+
+        this._tileChanged = true;
     },
 
-    /**
-     * !#en
-     * Returns the tiles data.An array fill with GIDs. <br />
-     * !#zh
-     * 返回 tiles 数据. 由GID构成的一个数组. <br />
-     * @method getTiles
-     * @return {Number[]}
-     */
-    getTiles() {
-        return this._tiles;
-    },
-    
     /**
      * !#en
      * Returns the tile gid at a given tile coordinate. <br />
@@ -704,8 +789,8 @@ let TiledLayer = cc.Class({
 
     // 'x, y' is the position of viewPort, which's anchor point is at the center of rect.
     // 'width, height' is the size of viewPort.
-    _updateViewPort (x, y, width, height) {
-        if (this._viewPort.width === width && 
+    updateViewPort (x, y, width, height) {
+        if (this._viewPort.width === width &&
             this._viewPort.height === height &&
             this._viewPort.x === x &&
             this._viewPort.y === y) {
@@ -739,11 +824,11 @@ let TiledLayer = cc.Class({
         // calc left down
         this._positionToRowCol(leftDownX, leftDownY, _tempRowCol);
         // make range large
-        _tempRowCol.row-=reserveLine;
-        _tempRowCol.col-=reserveLine;
+        _tempRowCol.row -= reserveLine;
+        _tempRowCol.col -= reserveLine;
         // insure left down row col greater than 0
         _tempRowCol.row = _tempRowCol.row > 0 ? _tempRowCol.row : 0;
-        _tempRowCol.col = _tempRowCol.col > 0 ? _tempRowCol.col : 0;        
+        _tempRowCol.col = _tempRowCol.col > 0 ? _tempRowCol.col : 0;
 
         if (_tempRowCol.row !== leftDown.row || _tempRowCol.col !== leftDown.col) {
             leftDown.row = _tempRowCol.row;
@@ -784,7 +869,11 @@ let TiledLayer = cc.Class({
             mapth = this._mapTileSize.height,
             maptw2 = maptw * 0.5,
             mapth2 = mapth * 0.5;
-        let row = 0, col = 0, diffX2 = 0, diffY2 = 0, axis = this._staggerAxis;
+        let row = 0,
+            col = 0,
+            diffX2 = 0,
+            diffY2 = 0,
+            axis = this._staggerAxis;
         let cols = this._layerSize.width;
 
         switch (this._layerOrientation) {
@@ -793,13 +882,13 @@ let TiledLayer = cc.Class({
                 col = Math.floor(x / maptw);
                 row = Math.floor(y / mapth);
                 break;
-            // right top to left down
-            // iso can be treat as special hex whose hex side length is 0
+                // right top to left down
+                // iso can be treat as special hex whose hex side length is 0
             case Orientation.ISO:
                 col = Math.floor(x / maptw2);
                 row = Math.floor(y / mapth2);
                 break;
-            // left top to right dowm
+                // left top to right dowm
             case Orientation.HEX:
                 if (axis === StaggerAxis.STAGGERAXIS_Y) {
                     row = Math.floor(y / (mapth - this._diffY1));
@@ -821,6 +910,15 @@ let TiledLayer = cc.Class({
         if (CC_EDITOR) {
             this.enableCulling(false);
         } else if (this._enableCulling) {
+            if (this._shareCulling && this.index > 0) {
+                const info = this._mapInfo.cullingInfo;
+                this._rightTop = info._rightTop;
+                this._viewPort = info._viewPort;
+                this._cullingRect = info._cullingRect;
+                this._cullingDirty = info._cullingDirty;
+                return;
+            }
+
             this.node._updateWorldMatrix();
             Mat4.invert(_mat4_temp, this.node._worldMatrix);
             let rect = cc.visibleRect;
@@ -834,7 +932,15 @@ let TiledLayer = cc.Class({
                 camera.getScreenToWorldPoint(_vec2_temp2, _vec2_temp2);
                 Vec2.transformMat4(_vec2_temp, _vec2_temp, _mat4_temp);
                 Vec2.transformMat4(_vec2_temp2, _vec2_temp2, _mat4_temp);
-                this._updateViewPort(_vec2_temp.x, _vec2_temp.y, _vec2_temp2.x - _vec2_temp.x, _vec2_temp2.y - _vec2_temp.y);
+                this.updateViewPort(_vec2_temp.x, _vec2_temp.y, _vec2_temp2.x - _vec2_temp.x, _vec2_temp2.y - _vec2_temp.y);
+            }
+
+            if (this._shareCulling && this.index === 0) {
+                const info = this._mapInfo.cullingInfo;
+                info._rightTop = this._rightTop;
+                info._viewPort = this._viewPort;
+                info._cullingRect = this._cullingRect;
+                info._cullingDirty = this._cullingDirty;
             }
         }
     },
@@ -889,7 +995,7 @@ let TiledLayer = cc.Class({
             rows = this._layerSize.height,
             cols = this._layerSize.width,
             grids = this._texGrids;
-        
+
         let gid, grid, left, bottom,
             axis, diffX1, diffY1, odd_even, diffX2, diffY2;
 
@@ -900,11 +1006,16 @@ let TiledLayer = cc.Class({
             odd_even = this._odd_even;
         }
 
-        let cullingCol = 0, cullingRow = 0;
-        let tileOffset = null, gridGID = 0;
+        let cullingCol = 0,
+            cullingRow = 0;
+        let tileOffset = null,
+            gridGID = 0;
 
         // grid border
-        let topBorder = 0, downBorder = 0, leftBorder = 0, rightBorder = 0;
+        let topBorder = 0,
+            downBorder = 0,
+            leftBorder = 0,
+            rightBorder = 0;
         let index = row * cols + col;
         gid = tiles[index];
         gridGID = ((gid & FLIPPED_MASK) >>> 0);
@@ -926,9 +1037,9 @@ let TiledLayer = cc.Class({
                 left = cullingCol * maptw;
                 bottom = cullingRow * mapth;
                 break;
-            // right top to left down
+                // right top to left down
             case Orientation.ISO:
-            	// if not consider about col, then left is 'w/2 * (rows - row - 1)'
+                // if not consider about col, then left is 'w/2 * (rows - row - 1)'
                 // if consider about col then left must add 'w/2 * col'
                 // so left is 'w/2 * (rows - row - 1) + w/2 * col'
                 // combine expression is 'w/2 * (rows - row + col -1)'
@@ -941,7 +1052,7 @@ let TiledLayer = cc.Class({
                 left = maptw2 * cullingCol;
                 bottom = mapth2 * cullingRow;
                 break;
-            // left top to right dowm
+                // left top to right dowm
             case Orientation.HEX:
                 diffX2 = (axis === StaggerAxis.STAGGERAXIS_Y && row % 2 === 1) ? maptw2 * odd_even : 0;
                 diffY2 = (axis === StaggerAxis.STAGGERAXIS_X && col % 2 === 1) ? mapth2 * -odd_even : 0;
@@ -953,9 +1064,12 @@ let TiledLayer = cc.Class({
                 break;
         }
 
-        let rowData = vertices[cullingRow] = vertices[cullingRow] || {minCol:0, maxCol:0};
+        let rowData = vertices[cullingRow] = vertices[cullingRow] || {
+            minCol: 0,
+            maxCol: 0
+        };
         let colData = rowData[cullingCol] = rowData[cullingCol] || {};
-        
+
         // record each row range, it will faster when culling grid
         if (rowData.minCol > cullingCol) {
             rowData.minCol = cullingCol;
@@ -978,9 +1092,9 @@ let TiledLayer = cc.Class({
         // tileOffset is tileset offset which is related to each grid
         // tileOffset coordinate system's y axis is opposite with engine's y axis.
         tileOffset = grid.tileset.tileOffset;
-        left += this._offset.x + tileOffset.x;
-        bottom += this._offset.y - tileOffset.y;
-        
+        left += this._offset.x + tileOffset.x + grid.offsetX;
+        bottom += this._offset.y - tileOffset.y - grid.offsetY;
+
         topBorder = -tileOffset.y + grid.tileset._tileSize.height - mapth;
         topBorder = topBorder < 0 ? 0 : topBorder;
         downBorder = tileOffset.y < 0 ? 0 : tileOffset.y;
@@ -1007,12 +1121,12 @@ let TiledLayer = cc.Class({
         colData.left = left;
         colData.bottom = bottom;
         // this index is tiledmap grid index
-        colData.index = index; 
+        colData.index = index;
 
         this._cullingDirty = true;
     },
 
-    _updateVertices () {
+    _updateVertices() {
         let vertices = this._vertices;
         vertices.length = 0;
 
@@ -1085,7 +1199,7 @@ let TiledLayer = cc.Class({
         return tile;
     },
 
-    /** 
+    /**
      * !#en
      * Change tile to TiledTile at the specified coordinate.
      * !#zh
@@ -1112,7 +1226,7 @@ let TiledLayer = cc.Class({
         if (tiledTile) {
             this._hasTiledNodeGrid = true;
         } else {
-            this._hasTiledNodeGrid = this._tiledTiles.some(function (tiledNode, index) {
+            this._hasTiledNodeGrid = this._tiledTiles.some(function(tiledNode, index) {
                 return !!tiledNode;
             });
         }
@@ -1151,7 +1265,7 @@ let TiledLayer = cc.Class({
      * @method setTexture
      * @param {Texture2D} texture
      */
-    setTexture (texture){
+    setTexture (texture) {
         this.setTextures([texture]);
     },
 
@@ -1244,11 +1358,17 @@ let TiledLayer = cc.Class({
             }
         }
 
-        cc.TiledMap.loadAllTextures (textures, function () {
+        let texIdCache = {};
+        cc.TiledMap.loadAllTextures(textures, function() {
             for (let i = 0, l = tilesets.length; i < l; ++i) {
                 let tilesetInfo = tilesets[i];
                 if (!tilesetInfo) continue;
-                cc.TiledMap.fillTextureGrids(tilesetInfo, texGrids, i);
+
+                let idx = texIdCache[tex._id];
+                if (idx === undefined) {
+                    texIdCache[tex._id] = idx = i;
+                }
+                cc.TiledMap.fillTextureGrids(tilesetInfo, texGrids, idx);
             }
             this._prepareToRender();
         }.bind(this));
@@ -1266,9 +1386,8 @@ let TiledLayer = cc.Class({
 
         tilesetIndexArr.length = 0;
         for (let i = 0; i < tiles.length; i++) {
-            let gid = tiles[i];
+            let gid = ((tiles[i] & FLIPPED_MASK) >>> 0);
             if (gid === 0) continue;
-            gid = ((gid & FLIPPED_MASK) >>> 0);
             let grid = texGrids[gid];
             if (!grid) {
                 cc.error("CCTiledLayer:_traverseAllGrid grid is null, gid is:", gid);
@@ -1282,7 +1401,7 @@ let TiledLayer = cc.Class({
     },
 
     _init (layerInfo, mapInfo, tilesets, textures, texGrids) {
-        
+
         this._cullingDirty = true;
         this._layerInfo = layerInfo;
         this._mapInfo = mapInfo;
@@ -1297,7 +1416,13 @@ let TiledLayer = cc.Class({
         this._minGID = layerInfo._minGID;
         this._maxGID = layerInfo._maxGID;
         this._opacity = layerInfo._opacity;
-        this._renderOrder = mapInfo.renderOrder;
+
+        if (layerInfo.tintColor) {
+            this._tintColor = cc.color(layerInfo.tintColor);
+            this.node.color = this._tintColor;
+        }
+
+        this.renderOrder = mapInfo.renderOrder;
         this._staggerAxis = mapInfo.getStaggerAxis();
         this._staggerIndex = mapInfo.getStaggerIndex();
         this._hexSideLength = mapInfo.getHexSideLength();
@@ -1323,8 +1448,9 @@ let TiledLayer = cc.Class({
             // handle hex map
             const TiledMap = cc.TiledMap;
             const StaggerAxis = TiledMap.StaggerAxis;
-            const StaggerIndex = TiledMap.StaggerIndex;            
-            let width = 0, height = 0;
+            const StaggerIndex = TiledMap.StaggerIndex;
+            let width = 0,
+                height = 0;
 
             this._odd_even = (this._staggerIndex === StaggerIndex.STAGGERINDEX_ODD) ? 1 : -1;
             if (this._staggerAxis === StaggerAxis.STAGGERAXIS_X) {
@@ -1378,12 +1504,23 @@ let TiledLayer = cc.Class({
         let texture = this._textures[tilesetIdx];
         let material = this._materials[index];
         if (!material) {
-            material = Material.getBuiltinMaterial('2d-sprite');
+            material = Material.getBuiltinMaterial(this._withColor ? '2d-sprite' : '2d-sprite-nocolor');
         }
         material = MaterialVariant.create(material, this);
 
         material.define('CC_USE_MODEL', true);
         material.setProperty('texture', texture);
+
+        let srcBlendFactor = this._premultiplyAlpha ? cc.gfx.BLEND_ONE : cc.gfx.BLEND_SRC_ALPHA;
+        let dstBlendFactor = cc.gfx.BLEND_ONE_MINUS_SRC_ALPHA;
+
+        material.setBlend(
+            true,
+            cc.gfx.BLEND_FUNC_ADD,
+            srcBlendFactor, dstBlendFactor,
+            cc.gfx.BLEND_FUNC_ADD,
+            srcBlendFactor, dstBlendFactor
+        );
 
         this._materials[index] = material;
         texIdMatIdx[tilesetIdx] = index;
