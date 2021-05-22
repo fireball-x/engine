@@ -669,6 +669,8 @@ export class Label extends Renderable2D {
     protected _fontAtlas: FontAtlas | null = null;
     protected _letterTexture: LetterRenderTexture | null = null;
 
+    private _refreshAssembler = true;
+
     constructor () {
         super();
         if (EDITOR) {
@@ -690,10 +692,16 @@ export class Label extends Renderable2D {
             this.fontFamily = 'Arial';
         }
 
-        this.updateRenderData(true);
+        this._refreshAssembler = true;
+        this._renderDataFlag = true;
+
+        if (this._font instanceof BitmapFont) {
+            this.updateRenderData(this._refreshAssembler);
+        }
     }
 
     public onDisable () {
+        this._renderDataFlag = false;
         super.onDisable();
     }
 
@@ -729,6 +737,7 @@ export class Label extends Renderable2D {
             // Hack: Fixed the bug that richText wants to get the label length by _measureText, _assembler.updateRenderData will update the content size immediately.
             if (this.renderData) this.renderData.vertDirty = true;
             this._applyFontTexture();
+            this._refreshAssembler = false;
         }
     }
 
@@ -744,14 +753,20 @@ export class Label extends Renderable2D {
         } else {
             this._updateWorldAlpha();
             if (this._colorDirty) {
-                this.updateRenderData(false);
+                this.updateRenderData(this._refreshAssembler);
                 this._colorDirty = false;
             } else if ((this._cacheAlpha !== this.node._uiProps.opacity) && this._renderFlag && this._assembler && this._assembler.updateOpacity) {
+                if (this._changeToRender) {
+                    this._renderDataFlag = true;
+                    this._changeToRender = false;
+                }
                 this._assembler.updateOpacity(this);
                 this._cacheAlpha = this.node._uiProps.opacity;
             }
         }
     }
+
+    protected _changeToRender = true;
 
     protected _canRender () {
         if (!super._canRender() || !this._string) {
@@ -767,6 +782,7 @@ export class Label extends Renderable2D {
             }
         }
 
+        if (this._renderFlag !== true) this._changeToRender = true;
         return true;
     }
 
