@@ -39,6 +39,7 @@ import { legacyCC } from '../global-exports';
 import { IPassInfoFull, Pass, PassOverrides } from '../renderer/core/pass';
 import { MacroRecord, MaterialProperty, PropertyType } from '../renderer/core/pass-utils';
 import { Color } from '../math/color';
+import { markAsGCRoot, ReferenceType } from '../data/garbage-collection';
 import { warnID } from '../platform/debug';
 
 /**
@@ -104,6 +105,7 @@ export class Material extends Asset {
         return hash;
     }
 
+    @markAsGCRoot
     @type(EffectAsset)
     protected _effectAsset: EffectAsset | null = null;
 
@@ -116,6 +118,7 @@ export class Material extends Asset {
     @serializable
     protected _states: PassOverrides[] = [];
 
+    @markAsGCRoot(ReferenceType.ANY_ARRAY)
     @serializable
     protected _props: Record<string, MaterialPropertyFull | MaterialPropertyFull[]>[] = [];
 

@@ -28,16 +28,15 @@
  * @hidden
  */
 
-import { Asset } from '../assets';
 import { error } from '../platform/debug';
 import packManager from './pack-manager';
 import RequestItem from './request-item';
-import { assets, CompleteCallbackNoData, fetchPipeline } from './shared';
+import { assets, fetchPipeline } from './shared';
 import Task from './task';
 import { clear, forEach, getDepends } from './utilities';
 import { legacyCC } from '../global-exports';
 
-export default function fetch (task: Task, done: CompleteCallbackNoData) {
+export default function fetch (task: Task) {
     let firstTask = false;
     if (!task.progress) {
         task.progress = { finish: 0, total: task.input.length, canInvoke: true };
@@ -54,7 +53,7 @@ export default function fetch (task: Task, done: CompleteCallbackNoData) {
     forEach(task.input as RequestItem[], (item, cb) => {
         if (!item.isNative && assets.has(item.uuid)) {
             const asset = assets.get(item.uuid);
-            item.content = asset!.addRef();
+            item.content = asset;
             task.output.push(item);
             if (progress.canInvoke) {
                 task.dispatch('progress', ++progress.finish, progress.total, item);
@@ -69,7 +68,7 @@ export default function fetch (task: Task, done: CompleteCallbackNoData) {
                     if (!legacyCC.assetManager.force || firstTask) {
                         error(err.message, err.stack);
                         progress.canInvoke = false;
-                        done(err);
+                        task.done(err);
                     } else {
                         task.output.push(item);
                         if (progress.canInvoke) {
@@ -93,7 +92,7 @@ export default function fetch (task: Task, done: CompleteCallbackNoData) {
         });
     }, () => {
         if (task.isFinish) {
-            clear(task, true);
+            clear(task);
             task.dispatch('error');
             return;
         }
@@ -110,23 +109,12 @@ export default function fetch (task: Task, done: CompleteCallbackNoData) {
                         task.output.push(...subTask.output);
                         subTask.recycle();
                     }
-                    if (firstTask) { decreaseRef(task); }
-                    done(err);
+                    task.done(err);
                 },
             });
             fetchPipeline.async(subTask);
             return;
         }
-        if (firstTask) { decreaseRef(task); }
-        done();
+        task.done();
     });
-}
-
-function decreaseRef (task: Task) {
-    const output = task.output as RequestItem[];
-    for (let i = 0, l = output.length; i < l; i++) {
-        if (output[i].content) {
-            (output[i].content as Asset).decRef(false);
-        }
-    }
 }

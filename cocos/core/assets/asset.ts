@@ -34,7 +34,7 @@ import { EDITOR, PREVIEW } from 'internal:constants';
 import { property } from '../data/decorators/property';
 import { getUrlWithUuid } from '../asset-manager/helper';
 import { Eventify } from '../event';
-import { CCObject } from '../data/object';
+import { GCObject } from '../data/gc-object';
 import { Node } from '../scene-graph';
 import { legacyCC } from '../global-exports';
 import { extname } from '../utils/path';
@@ -61,7 +61,7 @@ import { extname } from '../utils/path';
  * @extends CCObject
  */
 @ccclass('cc.Asset')
-export class Asset extends Eventify(CCObject) {
+export class Asset extends Eventify(GCObject) {
     /**
      * 应 AssetDB 要求提供这个方法。
      * @method deserialize
@@ -101,7 +101,6 @@ export class Asset extends Eventify(CCObject) {
     public __depends__: any = null;
 
     private _file: any = null;
-    private _ref = 0;
 
     /**
      * @en
@@ -150,7 +149,7 @@ export class Asset extends Eventify(CCObject) {
         this._file = obj;
     }
 
-    constructor (...args: ConstructorParameters<typeof CCObject>) {
+    constructor (...args: ConstructorParameters<typeof GCObject>) {
         super(...args);
 
         Object.defineProperty(this, '_uuid', {
@@ -239,52 +238,6 @@ export class Asset extends Eventify(CCObject) {
         return undefined;
     }
 
-    /**
-     * @en
-     * The number of reference
-     *
-     * @zh
-     * 引用的数量
-     */
-    public get refCount (): number {
-        return this._ref;
-    }
-
-    /**
-     * @en
-     * Add references of asset
-     *
-     * @zh
-     * 增加资源的引用
-     *
-     * @return itself
-     *
-     */
-    public addRef (): Asset {
-        this._ref++;
-        return this;
-    }
-
-    /**
-     * @en
-     * Reduce references of asset and it will be auto released when refCount equals 0.
-     *
-     * @zh
-     * 减少资源的引用并尝试进行自动释放。
-     *
-     * @return itself
-     *
-     */
-    public decRef (autoRelease = true): Asset {
-        if (this._ref > 0) {
-            this._ref--;
-        }
-        if (autoRelease) {
-            legacyCC.assetManager._releaseManager.tryRelease(this);
-        }
-        return this;
-    }
-
     public onLoaded () {}
 
     public initDefault (uuid?: string) {
@@ -294,6 +247,12 @@ export class Asset extends Eventify(CCObject) {
 
     public validate (): boolean {
         return true;
+    }
+
+    public destroy () {
+        legacyCC.assetManager.assets.remove(this._uuid);
+        console.log(`The asset ${this._uuid} has been reclaimed`);
+        return super.destroy();
     }
 }
 

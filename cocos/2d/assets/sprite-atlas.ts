@@ -35,6 +35,7 @@ import * as js from '../../core/utils/js';
 import { Asset } from '../../core/assets';
 import { SpriteFrame } from './sprite-frame';
 import { legacyCC } from '../../core/global-exports';
+import { markAsGCRoot, ReferenceType } from '../../core/data/garbage-collection';
 
 interface ISpriteAtlasSerializeData{
     name: string;
@@ -53,6 +54,7 @@ interface ISpriteFrameList {
  */
 @ccclass('cc.SpriteAtlas')
 export class SpriteAtlas extends Asset {
+    @markAsGCRoot(ReferenceType.GC_OBJECT_RECORD)
     @serializable
     @editable
     public spriteFrames: ISpriteFrameList = js.createMap();

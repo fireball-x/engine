@@ -41,7 +41,8 @@ import { Renderable2D, InstanceMaterialType } from '../framework/renderable-2d';
 import { legacyCC } from '../../core/global-exports';
 import { PixelFormat } from '../../core/assets/asset-enum';
 import { TextureBase } from '../../core/assets/texture-base';
-import { Material, Node, RenderTexture } from '../../core';
+import { Material, RenderTexture } from '../../core';
+import { markAsGCRoot } from '../../core/data/garbage-collection';
 import { NodeEventType } from '../../core/scene-graph/node-event';
 
 /**
@@ -449,6 +450,7 @@ export class Sprite extends Renderable2D {
     public static SizeMode = SizeMode;
     public static EventType = EventType;
 
+    @markAsGCRoot
     @serializable
     protected _spriteFrame: SpriteFrame | null = null;
     @serializable
@@ -468,6 +470,7 @@ export class Sprite extends Renderable2D {
     @serializable
     protected _useGrayscale = false;
     // _state = 0;
+    @markAsGCRoot
     @serializable
     protected _atlas: SpriteAtlas | null = null;
     // static State = State;

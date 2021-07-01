@@ -180,12 +180,16 @@ export class Skybox {
             const mat = new Material();
             mat.initialize({ effectName: 'skybox', defines: { USE_RGBE_CUBEMAP: this.isRGBE } });
             skybox_material = new MaterialInstance({ parent: mat });
+            skybox_material.addRef();
         } else {
             skybox_material.recompileShaders({ USE_RGBE_CUBEMAP: this.isRGBE });
         }
 
         if (this.enabled) {
-            if (!skybox_mesh) { skybox_mesh = legacyCC.utils.createMesh(legacyCC.primitives.box({ width: 2, height: 2, length: 2 })) as Mesh; }
+            if (!skybox_mesh) {
+                skybox_mesh = legacyCC.utils.createMesh(legacyCC.primitives.box({ width: 2, height: 2, length: 2 })) as Mesh;
+                skybox_mesh.addRef();
+            }
             this._model.initSubModel(0, skybox_mesh.renderingSubMeshes[0], skybox_material);
         }
         this._updateGlobalBinding();

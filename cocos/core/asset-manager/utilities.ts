@@ -40,20 +40,19 @@ import RequestItem from './request-item';
 import { assets, AssetType, CompleteCallbackNoData, CompleteCallback, IOptions, ProgressCallback, references } from './shared';
 import Task from './task';
 
+declare class WeakRef {
+    constructor (obj: any);
+}
+
 let defaultProgressCallback: ProgressCallback | null = null;
 
 export function setDefaultProgressCallback (onProgress: ProgressCallback) {
     defaultProgressCallback = onProgress;
 }
 
-export function clear (task: Task, clearRef: boolean) {
+export function clear (task: Task) {
     for (let i = 0, l = task.input.length; i < l; i++) {
         const item = task.input[i] as RequestItem;
-        if (clearRef) {
-            if (!item.isNative && item.content instanceof Asset) {
-                item.content.decRef(false);
-            }
-        }
         item.recycle();
     }
     task.input = null;
@@ -68,23 +67,6 @@ export function urlAppendTimestamp (url: string, append: boolean): string {
         return `${url}?_t=${Date.now()}`;
     }
     return url;
-}
-
-export type RetryFunction = (times: number, done: CompleteCallback) => void;
-
-export function retry (process: RetryFunction, times: number, wait: number, onComplete: CompleteCallback, index = 0) {
-    process(index, (err, result) => {
-        index++;
-        if (!err || index > times) {
-            if (onComplete) {
-                onComplete(err, result);
-            }
-        } else {
-            setTimeout(() => {
-                retry(process, times, wait, onComplete, index);
-            }, wait);
-        }
-    });
 }
 
 export function getDepends (uuid: string, data: Asset | Record<string, any>, exclude: Record<string, any>,
@@ -143,14 +125,14 @@ export function setProperties (uuid: string, asset: Asset, assetsMap: Record<str
                 }
                 missingAsset = true;
             } else {
-                depend.owner[depend.prop] = dependAsset.addRef();
+                depend.owner[depend.prop] = dependAsset;
                 if (EDITOR) {
                     let reference = references!.get(dependAsset);
                     if (!reference || isScene(asset)) {
                         reference = [];
                         references!.add(depend.uuid, reference);
                     }
-                    reference.push([asset, depend.owner, depend.prop]);
+                    reference.push([new WeakRef(asset), new WeakRef(depend.owner), depend.prop]);
                 }
             }
         }
@@ -301,14 +283,7 @@ export function checkCircleReference (owner: string, uuid: string, map: Record<s
 export function asyncify (cb: ((p1?: any, p2?: any) => void) | null): (p1?: any, p2?: any) => void {
     return (p1, p2) => {
         if (!cb) { return; }
-        const refs: Asset[] = [];
-        if (Array.isArray(p2)) {
-            p2.forEach((x) => x instanceof Asset && refs.push(x.addRef()));
-        } else if (p2 instanceof Asset) {
-            refs.push(p2.addRef());
-        }
         callInNextTick(() => {
-            refs.forEach((x) => x.decRef(false));
             cb(p1, p2);
         });
     };

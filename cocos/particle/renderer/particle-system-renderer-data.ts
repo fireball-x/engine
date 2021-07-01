@@ -32,6 +32,7 @@ import ParticleSystemRendererGPU from './particle-system-renderer-gpu';
 import { director } from '../../core/director';
 import { Device, Feature } from '../../core/gfx';
 import { legacyCC } from '../../core/global-exports';
+import { markAsGCRoot } from '../../core';
 import { errorID } from '../../core';
 
 function isSupportGPUParticle () {
@@ -110,6 +111,7 @@ export default class ParticleSystemRenderer {
     @serializable
     private _lengthScale = 1;
 
+    @markAsGCRoot
     @serializable
     private _mesh: Mesh | null = null;
 
@@ -168,6 +170,7 @@ export default class ParticleSystemRenderer {
         }
     }
 
+    @markAsGCRoot
     @serializable
     private _mainTexture: Texture2D | null = null;
 

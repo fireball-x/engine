@@ -35,6 +35,7 @@ import { Component } from '../core/components/component';
 import { clamp } from '../core/math';
 import { AudioClip } from './audio-clip';
 import { audioManager } from './audio-manager';
+import { markAsGCRoot } from '../core/data/garbage-collection';
 
 enum AudioSourceEventType {
     STARTED = 'started',
@@ -59,6 +60,7 @@ export class AudioSource extends Component {
 
     public static EventType = AudioSourceEventType;
 
+    @markAsGCRoot
     @type(AudioClip)
     protected _clip: AudioClip | null = null;
     protected _player: AudioPlayer | null = null;

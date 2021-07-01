@@ -57,6 +57,7 @@ import { IParticleSystemRenderer } from './renderer/particle-system-renderer-bas
 import { PARTICLE_MODULE_PROPERTY } from './particle';
 import { legacyCC } from '../core/global-exports';
 import { TransformBit } from '../core/scene-graph/node-enum';
+import { markAsGCRoot, ReferenceType } from '../core';
 
 const _world_mat = new Mat4();
 const _world_rol = new Quat();
@@ -542,6 +543,7 @@ export class ParticleSystem extends RenderableComponent {
     }
 
     // particle system renderer
+    @markAsGCRoot(ReferenceType.CCCLASS_OBJECT)
     @type(ParticleSystemRenderer)
     @serializable
     @displayOrder(26)
@@ -583,6 +585,7 @@ export class ParticleSystem extends RenderableComponent {
     @serializable
     private _simulationSpace = Space.Local;
 
+    @markAsGCRoot(ReferenceType.CCCLASS_OBJECT)
     public processor: IParticleSystemRenderer = null!;
 
     constructor () {

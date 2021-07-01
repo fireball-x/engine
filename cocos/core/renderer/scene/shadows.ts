@@ -31,6 +31,7 @@ import { legacyCC } from '../../global-exports';
 import { Enum } from '../../value-types';
 import { ShadowsInfo } from '../../scene-graph/scene-globals';
 import { IMacroPatch } from '../core/pass';
+import { ccclass } from '../../data/decorators';
 import { NativeShadow } from './native-scene';
 import { Shader } from '../../gfx';
 
@@ -87,7 +88,7 @@ export const PCFType = Enum({
 });
 
 const SHADOW_TYPE_NONE = ShadowType.ShadowMap + 1;
-
+@ccclass('cc.Shadows')
 export class Shadows {
     /**
      * @en MAX_FAR. This is shadow camera max far.
@@ -413,6 +414,7 @@ export class Shadows {
     public getPlanarShader (patches: IMacroPatch[] | null): Shader | null {
         if (!this._material) {
             this._material = new Material();
+            this._material.addRef();
             this._material.initialize({ effectName: 'planar-shadow' });
             if (JSB) {
                 this._nativeObj!.planarPass = this._material.passes[0].native;
@@ -425,6 +427,7 @@ export class Shadows {
     public getPlanarInstanceShader (patches: IMacroPatch[] | null): Shader | null {
         if (!this._instancingMaterial) {
             this._instancingMaterial = new Material();
+            this._instancingMaterial.addRef();
             this._instancingMaterial.initialize({ effectName: 'planar-shadow', defines: { USE_INSTANCING: true } });
             if (JSB) {
                 this._nativeObj!.instancePass = this._instancingMaterial.passes[0].native;
@@ -488,6 +491,7 @@ export class Shadows {
     protected _updatePlanarInfo () {
         if (!this._material) {
             this._material = new Material();
+            this._material.addRef();
             this._material.initialize({ effectName: 'planar-shadow' });
             if (JSB) {
                 this._nativeObj!.planarPass = this._material.passes[0].native;
@@ -495,6 +499,7 @@ export class Shadows {
         }
         if (!this._instancingMaterial) {
             this._instancingMaterial = new Material();
+            this._instancingMaterial.addRef();
             this._instancingMaterial.initialize({ effectName: 'planar-shadow', defines: { USE_INSTANCING: true } });
             if (JSB) {
                 this._nativeObj!.instancePass = this._instancingMaterial.passes[0].native;

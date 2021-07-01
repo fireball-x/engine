@@ -43,8 +43,8 @@ import { Sprite } from '../../2d/components/sprite';
 import { EditBoxImpl } from './edit-box-impl';
 import { EditBoxImplBase } from './edit-box-impl-base';
 import { InputFlag, InputMode, KeyboardReturnType } from './types';
-import { sys } from '../../core/platform/sys';
 import { legacyCC } from '../../core/global-exports';
+import { markAsGCRoot } from '../../core/data/garbage-collection';
 import { NodeEventType } from '../../core/scene-graph/node-event';
 
 const LEFT_PADDING = 2;
@@ -367,6 +367,7 @@ export class EditBox extends Component {
     protected  _string = '';
     @serializable
     protected  _tabIndex = 0;
+    @markAsGCRoot
     @serializable
     protected  _backgroundImage: SpriteFrame | null = null;
     @serializable

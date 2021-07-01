@@ -43,6 +43,8 @@ import { legacyCC } from './global-exports';
 import { RenderWindow, IRenderWindowInfo } from './renderer/core/render-window';
 import { ColorAttachment, DepthStencilAttachment, RenderPassInfo, StoreOp, Device } from './gfx';
 import { warnID } from './platform/debug';
+import { garbageCollectionManager, markAsGCRoot } from './data/garbage-collection';
+import { ccclass } from './data/decorators';
 
 /**
  * @zh
@@ -64,6 +66,7 @@ export interface ISceneInfo {
  * @zh
  * Root类
  */
+@ccclass('cc.Root')
 export class Root {
     private _init (): void {
         if (JSB) {
@@ -229,6 +232,7 @@ export class Root {
     private _mainWindow: RenderWindow | null = null;
     private _curWindow: RenderWindow | null = null;
     private _tempWindow: RenderWindow | null = null;
+    @markAsGCRoot
     private _pipeline: RenderPipeline | null = null;
     private _batcher: Batcher2D | null = null;
     private _dataPoolMgr: DataPoolManager;
@@ -281,6 +285,8 @@ export class Root {
             swapchainBufferIndices: -1, // always on screen
         });
         this._curWindow = this._mainWindow;
+
+        garbageCollectionManager.addCCClassObjectToRoot(builtinResMgr);
 
         return Promise.resolve(builtinResMgr.initBuiltinRes(this._device)).then(() => {
             legacyCC.view.on('design-resolution-changed', () => {

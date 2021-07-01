@@ -35,6 +35,7 @@ import { SpriteFrame } from './sprite-frame';
 import { legacyCC } from '../../core/global-exports';
 import { js } from '../../core/utils';
 import { warn } from '../../core/platform/debug';
+import { markAsGCRoot, ReferenceType } from '../../core/data/garbage-collection';
 
 export interface IConfig {
     [key: string]: any;
@@ -118,6 +119,7 @@ export class BitmapFont extends Font {
      * @en [[SpriteFrame]] of the bitmap font
      * @zh 位图字体所使用的精灵。
      */
+    @markAsGCRoot
     @type(SpriteFrame)
     public spriteFrame: SpriteFrame | null = null;
 

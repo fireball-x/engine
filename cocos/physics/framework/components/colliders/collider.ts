@@ -42,6 +42,7 @@ import { IBaseShape } from '../../../spec/i-physics-shape';
 import { AABB, Sphere } from '../../../../core/geometry';
 import { EColliderType, EAxisDirection } from '../../physics-enum';
 import { createShape } from '../../instance';
+import { markAsGCRoot } from '../../../../core/data/garbage-collection';
 
 /**
  * @en
@@ -226,6 +227,7 @@ export class Collider extends Eventify(Component) {
     protected _needCollisionEvent = false;
     // protected _attachedRigidBody: RigidBody | null = null;
 
+    @markAsGCRoot
     @type(PhysicsMaterial)
     protected _material: PhysicsMaterial | null = null;
 

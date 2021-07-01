@@ -43,6 +43,8 @@ import { CollisionMatrix } from './collision-matrix';
 import { PhysicsGroup } from './physics-enum';
 import { selector } from './physics-selector';
 import { legacyCC } from '../../core/global-exports';
+import { garbageCollectionManager, markAsGCRoot } from '../../core/data/garbage-collection';
+import { ccclass } from '../../core/data/decorators';
 
 legacyCC.internal.PhysicsGroup = PhysicsGroup;
 
@@ -52,6 +54,7 @@ legacyCC.internal.PhysicsGroup = PhysicsGroup;
  * @zh
  * 物理系统。
  */
+@ccclass('cc.PhysicsSystem')
 export class PhysicsSystem extends System {
     static get PHYSICS_NONE () {
         return !selector.id;
@@ -260,6 +263,7 @@ export class PhysicsSystem extends System {
     private _accumulator = 0;
     private _sleepThreshold = 0.1;
     private readonly _gravity = new Vec3(0, -10, 0);
+    @markAsGCRoot
     private readonly _material = new PhysicsMaterial();
 
     private readonly raycastOptions: IRaycastOptions = {
@@ -455,5 +459,6 @@ function initPhysicsSystem () {
         const sys = new legacyCC.PhysicsSystem();
         legacyCC.PhysicsSystem._instance = sys;
         director.registerSystem(PhysicsSystem.ID, sys, System.Priority.LOW);
+        garbageCollectionManager.addCCClassObjectToRoot(sys);
     }
 }

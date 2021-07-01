@@ -47,6 +47,8 @@ import { Node } from './scene-graph/node';
 import { BrowserType } from '../../pal/system/enum-type';
 import { Layers } from './scene-graph';
 import { log2 } from './math/bits';
+import { garbageCollectionManager } from './data/garbage-collection';
+import { ccclass } from './data/decorators';
 
 interface ISceneInfo {
     url: string;
@@ -178,6 +180,7 @@ export interface IGameConfig {
  * @en An object to boot the game.
  * @zh 包含游戏主体信息并负责驱动游戏的游戏对象。
  */
+@ccclass('cc.Game')
 export class Game extends EventTarget {
     /**
      * @en Event triggered when game hide to background.<br>
@@ -497,8 +500,6 @@ export class Game extends EventTarget {
             const userLayers: LayerItem[] = this.config.layers;
             for (let i = 0; i < userLayers.length; i++) {
                 const layer = userLayers[i];
-                const bitNum = log2(layer.value);
-                Layers.addLayer(layer.name, bitNum);
             }
         }
 
@@ -575,7 +576,6 @@ export class Game extends EventTarget {
             }
             this._persistRootNodes[id] = node;
             node._persistNode = true;
-            legacyCC.assetManager._releaseManager._addPersistNodeRef(node);
         }
     }
 
@@ -590,7 +590,6 @@ export class Game extends EventTarget {
             delete this._persistRootNodes[id];
             node._persistNode = false;
             node._originalSceneId = '';
-            legacyCC.assetManager._releaseManager._removePersistNodeRef(node);
         }
     }
 

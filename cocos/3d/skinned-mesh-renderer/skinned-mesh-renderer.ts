@@ -40,6 +40,7 @@ import { SkeletalAnimation } from '../skeletal-animation';
 import { legacyCC } from '../../core/global-exports';
 import { SkinningModel } from '../models/skinning-model';
 import { BakedSkinningModel } from '../models/baked-skinning-model';
+import { markAsGCRoot } from '../../core';
 
 /**
  * @en The skinned mesh renderer component.
@@ -51,12 +52,14 @@ import { BakedSkinningModel } from '../models/baked-skinning-model';
 @executeInEditMode
 @menu('Mesh/SkinnedMeshRenderer')
 export class SkinnedMeshRenderer extends MeshRenderer {
+    @markAsGCRoot
     @type(Skeleton)
     protected _skeleton: Skeleton | null = null;
 
     @type(Node)
     protected _skinningRoot: Node | null = null;
 
+    @markAsGCRoot
     protected _clip: AnimationClip | null = null;
 
     /**

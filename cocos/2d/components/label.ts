@@ -40,6 +40,7 @@ import { CanvasPool, ISharedLabelData, LetterRenderTexture } from '../assembler/
 import { InstanceMaterialType, Renderable2D } from '../framework/renderable-2d';
 import { TextureBase } from '../../core/assets/texture-base';
 import { PixelFormat } from '../../core/assets/asset-enum';
+import { markAsGCRoot, ReferenceType } from '../../core/data/garbage-collection';
 
 /**
  * @en Enum for horizontal text alignment.
@@ -643,6 +644,7 @@ export class Label extends Renderable2D {
     protected _overflow: Overflow = Overflow.NONE;
     @serializable
     protected _enableWrapText = true;
+    @markAsGCRoot
     @serializable
     protected _font: Font | null = null;
     @serializable
@@ -661,12 +663,17 @@ export class Label extends Renderable2D {
 
     // don't need serialize
     // 这个保存了旧项目的 file 数据
+    @markAsGCRoot
     protected _N$file: Font | null = null;
+    @markAsGCRoot
     protected _texture: SpriteFrame | LetterRenderTexture | null = null;
+    @markAsGCRoot
     protected _ttfSpriteFrame: SpriteFrame | null = null;
+    @markAsGCRoot
     protected _userDefinedFont: Font | null = null;
     protected _assemblerData: ISharedLabelData | null = null;
     protected _fontAtlas: FontAtlas | null = null;
+    @markAsGCRoot
     protected _letterTexture: LetterRenderTexture | null = null;
 
     constructor () {

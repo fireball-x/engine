@@ -27,12 +27,11 @@
  * @module asset-manager
  */
 import { warnID } from '../platform/debug';
-import { CompleteCallbackNoData } from './shared';
 import Task from './task';
 
-export type IAsyncPipe = (task: Task, done: CompleteCallbackNoData) => void;
-export type ISyncPipe = (task: Task) => Error | void;
-export type IPipe = IAsyncPipe | ISyncPipe;
+export type IAsyncPipe<T extends Task> = (task: T) => void;
+export type ISyncPipe<T extends Task> = (task: T) => Error | void;
+export type IPipe<T extends Task> = IAsyncPipe<T> | ISyncPipe<T>;
 
 /**
  * @en
@@ -42,7 +41,7 @@ export type IPipe = IAsyncPipe | ISyncPipe;
  * 管线能执行任务达到某个效果
  *
  */
-export class Pipeline {
+export class Pipeline<T extends Task> {
     private static _pipelineId = 0;
 
     /**
@@ -73,7 +72,9 @@ export class Pipeline {
      * 所有的管道
      *
      */
-    public pipes: IPipe[] = [];
+    public pipes: IPipe<T>[] = [];
+
+    public allTasks: T[] = [];
 
     /**
      * @en
@@ -104,7 +105,7 @@ export class Pipeline {
      * ]);
      *
      */
-    constructor (name: string, funcs: IPipe[]) {
+    constructor (name: string, funcs: IPipe<T>[]) {
         this.name = name;
         for (let i = 0, l = funcs.length; i < l; i++) {
             this.pipes.push(funcs[i]);
@@ -132,7 +133,7 @@ export class Pipeline {
      * }, 0);
      *
      */
-    public insert (func: IPipe, index: number): Pipeline {
+    public insert (func: IPipe<T>, index: number): Pipeline<T> {
         if (index > this.pipes.length) {
             warnID(4921);
             return this;
@@ -162,7 +163,7 @@ export class Pipeline {
      * });
      *
      */
-    public append (func: IPipe): Pipeline {
+    public append (func: IPipe<T>): Pipeline<T> {
         this.pipes.push(func);
         return this;
     }
@@ -185,7 +186,7 @@ export class Pipeline {
      * pipeline.remove(0);
      *
      */
-    public remove (index: number): Pipeline {
+    public remove (index: number): Pipeline<T> {
         this.pipes.splice(index, 1);
         return this;
     }
@@ -210,12 +211,12 @@ export class Pipeline {
      * console.log(pipeline.sync(task));
      *
      */
-    public sync (task: Task): any {
+    public sync (task: T): any {
         const pipes = this.pipes;
         if (pipes.length === 0) { return null; }
         task.isFinish = false;
         for (let i = 0, l = pipes.length; i < l;) {
-            const pipe = pipes[i] as ISyncPipe;
+            const pipe = pipes[i] as ISyncPipe<T>;
             const result = pipe(task);
             if (result) {
                 task.isFinish = true;
@@ -250,31 +251,47 @@ export class Pipeline {
      * pipeline.async(task);
      *
      */
-    public async (task: Task): void {
-        const pipes = this.pipes;
-        if (pipes.length === 0) { return; }
+    public async (task: T): void {
         task.isFinish = false;
-        this._flow(0, task);
+        task.internalId = this.allTasks.length;
+        this.allTasks.push(task);
     }
 
-    private _flow (index: number, task: Task): void {
-        const pipe = this.pipes[index];
-        pipe(task, (result) => {
-            if (result) {
-                task.isFinish = true;
-                task.dispatch('complete', result);
-            } else {
-                index++;
-                if (index < this.pipes.length) {
-                    // move output to input
-                    task.input = task.output;
-                    task.output = null;
-                    this._flow(index, task);
+    public update () {
+        for (let i = this.allTasks.length - 1; i >= 0; i--) {
+            const task = this.allTasks[i];
+            while (!task.isInvoking) {
+                if (task.isFinish) {
+                    this.removeTask(task);
+                    if (task.error) { task.dispatch('complete', task.error); }
+                    else { task.dispatch('complete', null, task.output); }
+                } else if (task.currentStage !== this.pipes.length && (task.finishedStages & (1 << task.currentStage)) === 0) {
+                    if (task.currentStage !== 0) {
+                        // move output to input
+                        task.input = task.output;
+                        task.output = null;
+                    }
+                    this._flow(task);
                 } else {
                     task.isFinish = true;
-                    task.dispatch('complete', result, task.output);
+                    this.removeTask(task);
+                    if (task.error) { task.dispatch('complete', task.error); }
+                    else { task.dispatch('complete', null, task.output); }
                 }
             }
-        });
+        }
+    }
+
+    private _flow (task: T): void {
+        const pipe = this.pipes[task.currentStage];
+        task.isInvoking = true;
+        pipe(task);
+    }
+
+    private removeTask (task: T) {
+        this.allTasks[task.internalId] = this.allTasks[this.allTasks.length - 1];
+        this.allTasks[task.internalId].internalId = task.internalId;
+        this.allTasks.length -= 1;
+        task.internalId = -1;
     }
 }

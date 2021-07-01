@@ -36,7 +36,7 @@ import { PresumedGFXTextureInfo, SimpleTexture } from './simple-texture';
 import { ITexture2DCreateInfo, Texture2D } from './texture-2d';
 import { legacyCC } from '../global-exports';
 import { js } from '../utils/js';
-import { builtinResMgr } from '../builtin/builtin-res-mgr';
+import { markAsGCRoot, ReferenceType } from '../data/garbage-collection';
 
 export type ITextureCubeCreateInfo = ITexture2DCreateInfo;
 
@@ -165,6 +165,7 @@ export class TextureCube extends SimpleTexture {
         return out;
     }
 
+    @markAsGCRoot(ReferenceType.ANY_ARRAY)
     @serializable
     public _mipmaps: ITextureCubeMipmap[] = [];
 

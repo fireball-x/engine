@@ -26,7 +26,7 @@
  * @packageDocumentation
  * @module asset-manager
  */
-export type TaskCompleteCallback = (err: Error | null | undefined, data: any) => void;
+export type TaskCompleteCallback = (err: Error | null, data: any) => void;
 export type TaskProgressCallback = (...args: any[]) => void;
 export type TaskErrorCallback = (...args: any[]) => void;
 export interface ITaskOption {
@@ -82,6 +82,10 @@ export default class Task {
 
     private static _taskId = 0;
     private static _deadPool: Task[] = [];
+    public currentStage = 0;
+    public finishedStages = 0;
+    public isInvoking = false;
+    public error: Error | null = null;
 
     /**
      * @en
@@ -92,6 +96,8 @@ export default class Task {
      *
      */
     public id: number = Task._taskId++;
+
+    public internalId = -1;
 
     /**
      * @en
@@ -278,6 +284,23 @@ export default class Task {
         }
     }
 
+    public done (result?: Error | null) {
+        this.isInvoking = false;
+        this.finishedStages |= 1 << this.currentStage;
+        if (result) {
+            this.error = result;
+            this.isFinish = true;
+        } else {
+            this.currentStage++;
+        }
+    }
+
+    public finish (result?: Error | null) {
+        this.isInvoking = false;
+        if (result) { this.error = result; }
+        this.isFinish = true;
+    }
+
     /**
      * @en
      * Recycle this for reuse
@@ -294,6 +317,11 @@ export default class Task {
         this.source = this.output = this.input = null;
         this.progress = null;
         this.options = null;
+        this.internalId = -1;
+        this.currentStage = 0;
+        this.finishedStages = 0;
+        this.error = null;
+        this.isInvoking = false;
         Task._deadPool.push(this);
     }
 }
