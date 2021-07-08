@@ -28,10 +28,12 @@
  * @hidden
  */
 
-import { Vec3, Quat } from '../../core/math';
+import { DEBUG } from 'internal:constants';
+import { Vec3, Quat, approx } from '../../core/math';
 import { Node } from '../../core/scene-graph';
 import { AnimationState } from '../../core/animation/animation-state';
 import { IBoundTarget } from '../../core/animation/bound-target';
+import { assertIsTrue } from '../../core/data/utils/asserts';
 
 export class BlendStateBuffer {
     private _nodeBlendStates: Map<Node, NodeBlendState> = new Map();
@@ -155,6 +157,9 @@ class Vec3PropertyBlendState extends PropertyBlendState<Vec3> {
     }
 
     public blend (value: Readonly<Vec3>, weight: number) {
+        if (weight === 0.0) {
+            return;
+        }
         const { blendedValue } = this;
         if (weight === 1.0) {
             Vec3.copy(blendedValue, value);
@@ -162,6 +167,9 @@ class Vec3PropertyBlendState extends PropertyBlendState<Vec3> {
             Vec3.scaleAndAdd(blendedValue, blendedValue, value, weight);
         }
         this.blendedWeight += weight;
+        if (DEBUG && this.blendedWeight > 1.0) {
+            assertIsTrue(approx(this.blendedWeight, 1.0, 1e-6));
+        }
     }
 
     public reset () {
@@ -187,6 +195,9 @@ class QuatPropertyBlendState extends PropertyBlendState<Quat> {
             Quat.slerp(blendedValue, blendedValue, value, t);
         }
         this.blendedWeight += weight;
+        if (DEBUG && this.blendedWeight > 1.0) {
+            assertIsTrue(approx(this.blendedWeight, 1.0, 1e-6));
+        }
     }
 
     public reset () {

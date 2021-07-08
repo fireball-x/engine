@@ -39,6 +39,7 @@ import * as Attr from './utils/attribute';
 import MissingScript from '../components/missing-script';
 import { Details } from './deserialize';
 import { Platform } from '../../../pal/system/enum-type';
+import { onAfterDeserializedTag } from './deserialize-symbols';
 
 // TODO remove default support
 
@@ -66,6 +67,13 @@ function _dereference (self) {
             propName = idPropList[i];
             id = idList[i];
             idObjList[i][propName] = deserializedList[id];
+        }
+    }
+
+    for (let i = 0; i < deserializedList.length; ++i) {
+        const deserialized = deserializedList[i];
+        if (deserialized && deserialized[onAfterDeserializedTag]) {
+            deserialized[onAfterDeserializedTag]();
         }
     }
 }

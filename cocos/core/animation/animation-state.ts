@@ -42,6 +42,7 @@ import { ccenum } from '../value-types/enum';
 import { IValueProxyFactory } from './value-proxy';
 import { assertIsNonNullable, assertIsTrue } from '../data/utils/asserts';
 import { debug } from '../platform/debug';
+import { SkeletonMask } from './skeleton-mask';
 
 /**
  * @en The event type supported by Animation
@@ -405,12 +406,12 @@ export class AnimationState extends Playable {
         return this._curveLoaded;
     }
 
-    public initialize (root: Node, propertyCurves?: readonly IRuntimeCurve[]) {
+    public initialize (root: Node, propertyCurves?: readonly IRuntimeCurve[], blendBuffer?: BlendStateBuffer, mask?: SkeletonMask) {
         if (this._curveLoaded) { return; }
         this._curveLoaded = true;
         this._destroyBlendStateWriters();
         this._samplerSharedGroups.length = 0;
-        this._blendStateBuffer = legacyCC.director.getAnimationManager()?.blendState ?? null;
+        this._blendStateBuffer = blendBuffer ?? legacyCC.director.getAnimationManager()?.blendState ?? null;
         this._targetNode = root;
         const clip = this._clip;
 
@@ -1030,6 +1031,36 @@ function isTargetingTRS (path: TargetPath[]) {
     default:
         return false;
     }
+}
+
+/**
+ * Apply skeleton mask to target path.
+ * @param path The path.
+ * @param mask The mask.
+ * @returns True if the target path should be filtered out by the mask, false otherwise.
+ */
+function applyMask (path: TargetPath[], mask: SkeletonMask): boolean {
+    if (path.length === 0) {
+        return false;
+    }
+    const reqPath: string[] = [];
+    for (const p of path) {
+        if (p instanceof HierarchyPath) {
+            reqPath.push(p.path);
+        } else {
+            break;
+        }
+    }
+    if (reqPath.length === 0) {
+        return false;
+    }
+    const finalPath = reqPath.join('/');
+    for (const { path: jointPath } of mask.joints) {
+        if (jointPath.endsWith(finalPath)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function wrapIterations (iterations: number) {
