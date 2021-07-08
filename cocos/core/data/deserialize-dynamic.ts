@@ -29,7 +29,7 @@
  */
 
 import { system } from 'pal/system';
-import { EDITOR, TEST, DEV, BUILD, JSB, PREVIEW, SUPPORT_JIT } from 'internal:constants';
+import { EDITOR, TEST, DEV, JSB, PREVIEW, SUPPORT_JIT } from 'internal:constants';
 import { legacyCC } from '../global-exports';
 import { warnID } from '../platform/debug';
 import * as js from '../utils/js';
@@ -456,7 +456,7 @@ class _Deserializer {
                 if (legacyCC.Class._isCCClass(klass)) {
                     _deserializeFireClass(self, obj, serialized, klass);
                 } else {
-                    self._deserializeTypedObject(obj, serialized, klass);
+                    self._deserializeFastDefinedObject(obj, serialized, klass);
                 }
             }
 
@@ -464,7 +464,7 @@ class _Deserializer {
                 try {
                     deserializeByType();
                 } catch (e) {
-                    console.error(`deserialize ${klass.name} failed, ${e.stack}`);
+                    console.error(`Deserialize ${type} failed, ${e.stack}`);
                     klass = MissingScript;
                     legacyCC.deserialize.reportMissingClass(type);
                     deserializeByType();
@@ -549,7 +549,7 @@ class _Deserializer {
         }
     }
 
-    private _deserializeTypedObject (instance, serialized, klass) {
+    private _deserializeFastDefinedObject (instance, serialized, klass) {
         if (klass === legacyCC.Vec2) {
             instance.x = serialized.x || 0;
             instance.y = serialized.y || 0;
@@ -574,13 +574,17 @@ class _Deserializer {
 
         const DEFAULT = `${Attr.DELIMETER}default`;
         const attrs = Attr.getClassAttrs(klass);
-        const fastDefinedProps = klass.__props__ || Object.keys(instance);    // 遍历 instance，如果具有类型，才不会把 __type__ 也读进来
+        const props = klass.__values__;
+        if (!props) {
+            console.error(`Unable to deserialize ${js.getClassName(klass)}. `
+                + 'For non-CCClass types, they can only be marked as serializable by `CCClass.fastDefine`.');
+        }
 
-        for (let i = 0; i < fastDefinedProps.length; i++) {
-            const propName = fastDefinedProps[i];
+        for (let i = 0; i < props.length; i++) {
+            const propName: string = props[i];
             let value = serialized[propName];
-            if (value === undefined || !serialized.hasOwnProperty(propName)) {
-                // not serialized,
+            const exists: boolean = (value !== undefined || serialized.hasOwnProperty(propName));
+            if (!exists) {
                 // recover to default value in ValueType, because eliminated properties equals to
                 // its default value in ValueType, not default value in user class
                 value = CCClass.getDefault(attrs[propName + DEFAULT]);
