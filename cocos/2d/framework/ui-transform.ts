@@ -426,6 +426,7 @@ export class UITransform extends Component {
             Vec2.transformMat4(cameraPt, point, _mat4_temp);
 
             this.node.getWorldMatrix(_worldMatrix);
+            _worldMatrix.m10 = 1;  // NOTE: setting scale z to 0 for ui-transform is meaningless
             Mat4.invert(_mat4_temp, _worldMatrix);
             if (Mat4.strictEquals(_mat4_temp, _zeroMatrix)) {
                 continue;
